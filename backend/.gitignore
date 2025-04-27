@@ -69,3 +69,4 @@ dmypy.json
 #Temps
 tmp/
 splat.usdz
+src/backend/splats/

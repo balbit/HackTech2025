@@ -141,8 +141,8 @@ export default function PatientPage() {
         </div>
         <div className="bg-red-50 p-2 rounded">
           <p className="text-red-700 font-medium">Equivalent Video Call</p>
-          <p className="text-red-800 text-lg font-bold">{formatBandwidth(videoBandwidth)}</p>
-          <p className="text-red-600 text-xs">You saved: {formatBandwidth(Math.max(0, videoBandwidth - actualBandwidth))}</p>
+          <p className="text-red-800 text-lg font-bold">{formatBandwidth(4*videoBandwidth)}</p>
+          <p className="text-red-600 text-xs">You saved: {formatBandwidth(Math.max(0, 4*videoBandwidth - actualBandwidth))}</p>
         </div>
       </div>
     </div>

@@ -1,15 +1,30 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { USDZLoader } from 'three-usdz-loader';
 
 interface ThreeJSViewerProps {
   modelUrl: string;
+  onScreenshotCapture?: (imageData: string) => void;
 }
 
-const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ modelUrl }) => {
+// Interface for the ref exposed by the component
+export interface ThreeJSViewerRef {
+  captureScreenshot: () => string | null;
+}
+
+// Custom type for our container element - we can remove this as we're using proper React refs
+interface ContainerElement extends HTMLDivElement {
+  captureScreenshot?: () => string | null;
+}
+
+// Convert to forwardRef component
+const ThreeJSViewer = forwardRef<ThreeJSViewerRef, ThreeJSViewerProps>(({ 
+  modelUrl,
+  onScreenshotCapture 
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -20,6 +35,38 @@ const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ modelUrl }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const mountedRef = useRef<boolean>(false);
+
+  // Method to capture a screenshot of the current view
+  const captureScreenshot = () => {
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) {
+      console.error("Can't capture screenshot: renderer, scene, or camera is not available");
+      return null;
+    }
+    
+    // Render the scene
+    rendererRef.current.render(sceneRef.current, cameraRef.current);
+    
+    // Get the canvas data as a data URL
+    try {
+      const dataURL = rendererRef.current.domElement.toDataURL('image/png');
+      console.log("Screenshot captured successfully");
+      
+      // Call the callback with the image data if provided
+      if (onScreenshotCapture) {
+        onScreenshotCapture(dataURL);
+      }
+      
+      return dataURL;
+    } catch (error) {
+      console.error("Error capturing screenshot:", error);
+      return null;
+    }
+  };
+
+  // Expose methods to parent component via ref
+  useImperativeHandle(ref, () => ({
+    captureScreenshot
+  }));
 
   // Cleanup function to ensure proper disposal of Three.js resources
   const cleanup = () => {
@@ -328,6 +375,9 @@ const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ modelUrl }) => {
       )}
     </div>
   );
-};
+});
+
+// Add display name for debugging
+ThreeJSViewer.displayName = 'ThreeJSViewer';
 
 export default ThreeJSViewer; 
