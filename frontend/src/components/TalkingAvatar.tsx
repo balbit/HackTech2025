@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useRef, useState } from 'react';
 import Lottie from 'lottie-react';
 import idleAnimation from '../assets/animations/idle-avatar.json';

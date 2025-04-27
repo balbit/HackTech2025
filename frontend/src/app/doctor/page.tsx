@@ -1,12 +1,17 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Toaster } from 'react-hot-toast';
 import ChatInterface from '@/components/ChatInterface';
+import ThreeJSViewer from '@/components/ThreeJSViewer';
 import { initializeSocket } from '@/lib/socket';
+import { useChatStore } from '@/lib/socket';
 
 export default function DoctorPage() {
+  const { splatStatus } = useChatStore();
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
+
   useEffect(() => {
     // Initialize socket connection when component mounts
     const socket = initializeSocket();
@@ -16,6 +21,15 @@ export default function DoctorPage() {
       socket.disconnect();
     };
   }, []);
+
+  // Set model URL when status becomes 'done'
+  useEffect(() => {
+    if (splatStatus === 'done') {
+      setModelUrl(`/api/get-splat?t=${Date.now()}`);
+    } else {
+      setModelUrl(null);
+    }
+  }, [splatStatus]);
   
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -38,10 +52,31 @@ export default function DoctorPage() {
             <ChatInterface userType="doctor" />
           </div>
           
-          <div className="bg-white rounded-lg shadow-md p-6 flex flex-col">
+          <div className="bg-white rounded-lg shadow-md p-4 flex flex-col">
             <h2 className="text-xl font-semibold mb-4">Patient 3D Model</h2>
-            <div className="flex-1 flex items-center justify-center bg-gray-100 rounded-lg">
-              <p className="text-gray-500">3D model will appear here when available</p>
+            <div className="flex-1 flex flex-col bg-gray-100 rounded-lg overflow-hidden" style={{ minHeight: "350px" }}>
+              {modelUrl ? (
+                <>
+                  <div className="flex-1">
+                    <ThreeJSViewer modelUrl={modelUrl} />
+                  </div>
+                  <div className="p-2 bg-gray-200 text-xs text-gray-600 flex justify-between">
+                    <span>Drag to rotate • Scroll to zoom</span>
+                    <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Original</a>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-6 text-center">
+                  <div>
+                    <p className="text-gray-500 mb-2">
+                      {splatStatus === 'processing' ? 'Processing 3D model...' : 'No 3D model available yet'}
+                    </p>
+                    {splatStatus === 'processing' && (
+                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

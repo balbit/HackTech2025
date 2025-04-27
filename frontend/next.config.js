@@ -1,5 +1,24 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
+  async headers() {
+    return [
+      {
+        // Apply these headers to all routes
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp',
+          },
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+        ],
+      },
+    ];
+  },
   // Add custom configurations if needed
   async rewrites() {
     const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8080';
@@ -10,14 +29,10 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${baseUrl}/api/:path*`
       },
-      // Socket.IO specific routes - each of these patterns is used by Socket.IO
+      // WebSocket route
       {
-        source: '/ws/socket.io',
-        destination: `${baseUrl}/ws/socket.io`
-      },
-      {
-        source: '/ws/socket.io/:path*',
-        destination: `${baseUrl}/ws/socket.io/:path*`
+        source: '/ws',
+        destination: `${baseUrl}/ws`
       }
     ];
   }

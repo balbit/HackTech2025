@@ -1,9 +1,11 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import ChatMessage from './ChatMessage';
 import TalkingAvatar from './TalkingAvatar';
-import { useChatStore, getSocket } from '@/lib/socket';
+import ThreeJSViewer from './ThreeJSViewer';
+import { useChatStore, getSocket, CustomWebSocket } from '@/lib/socket';
 
 interface ChatInterfaceProps {
   userType: 'doctor' | 'patient';
@@ -20,59 +22,63 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
     waitingForOther, 
     setWaitingForOther,
     splatStatus,
-    setSplatStatus
+    setSplatStatus,
+    setUserType
   } = useChatStore();
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<CustomWebSocket | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
 
   // Connect to socket and set up event listeners
   useEffect(() => {
+    // Set user type in the store
+    setUserType(userType);
+    
     const socket = getSocket();
     socketRef.current = socket;
 
-    // Join as doctor or patient
-    socket.emit('join', { userType });
-
-    // Listen for the other user joining
-    socket.on('userJoined', ({ type }) => {
-      if (
-        (userType === 'doctor' && type === 'patient') ||
-        (userType === 'patient' && type === 'doctor')
-      ) {
-        setWaitingForOther(false);
-        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} has joined the session`);
-      }
-    });
-
     // Listen for new messages
     socket.on('message', (data) => {
-      const sender = data.sender === userType ? userType : userType === 'doctor' ? 'patient' : 'doctor';
-      addMessage({ text: data.text, sender });
+      const otherUserType = userType === 'doctor' ? 'patient' : 'doctor';
       
-      // Only set lastReceivedMessage if it's from the other user
-      if (sender !== userType) {
+      // Only process messages that weren't sent by this user
+      if (data.sender !== userType) {
         setLastReceivedMessage(data.text);
-        setLastSpeaker(sender);
-      }
-    });
-
-    // Listen for splat status updates
-    socket.on('splatUpdate', (status) => {
-      setSplatStatus(status);
-      if (status === 'done') {
-        toast.success('3D model is now available');
-      } else if (status === 'processing') {
-        toast.loading('Processing 3D model...');
+        setLastSpeaker(otherUserType);
       }
     });
 
     // Poll for splat status
     const checkSplatInterval = setInterval(() => {
       fetch('/api/get-splat')
-        .then(response => response.json())
+        .then(async response => {
+          // Check the content type to determine if we got the actual file or JSON
+          const contentType = response.headers.get('content-type');
+          
+          if (response.ok && contentType && contentType.includes('model/vnd.usdz+zip')) {
+            // We received the actual USDZ file - the model is ready
+            setSplatStatus('done');
+            if (splatStatus !== 'done') {
+              toast.success('3D model is now available');
+            }
+            return null;
+          } else if (response.status === 404) {
+            // Splat not available
+            setSplatStatus('unavailable');
+            return null;
+          } else {
+            // It's JSON data with status information
+            try {
+              return await response.json();
+            } catch (e) {
+              console.error('Error parsing response:', e);
+              return null;
+            }
+          }
+        })
         .then(data => {
-          if (data.status !== splatStatus) {
+          if (data && data.status && data.status !== splatStatus) {
             setSplatStatus(data.status);
             if (data.status === 'done') {
               toast.success('3D model is now available');
@@ -80,15 +86,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
           }
         })
         .catch(error => console.error('Error checking splat status:', error));
-    }, 10000); // Every 10 seconds
+    }, 2000); // Check every 5 seconds instead of 10 for faster feedback
 
     return () => {
-      socket.off('userJoined');
-      socket.off('message');
-      socket.off('splatUpdate');
       clearInterval(checkSplatInterval);
     };
-  }, [userType, addMessage, setWaitingForOther, setSplatStatus, splatStatus]);
+  }, [userType, setUserType, addMessage, setWaitingForOther, setSplatStatus, splatStatus]);
 
   // Auto-scroll to bottom of chat when new messages arrive
   useEffect(() => {
@@ -102,7 +105,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
     if (!message.trim()) return;
 
     if (socketRef.current) {
-      socketRef.current.emit('sendMessage', { text: message, userType });
+      // With our native WebSocket, we just send the message text directly
+      socketRef.current.send(message);
+      
+      // Add message to our local state
       addMessage({ text: message, sender: userType });
       setMessage('');
       
@@ -144,10 +150,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
         // Inform the other user that images have been uploaded
         if (socketRef.current) {
           const uploadMessage = "I've uploaded images for 3D modeling";
-          socketRef.current.emit('sendMessage', { 
-            text: uploadMessage, 
-            userType 
-          });
+          socketRef.current.send(uploadMessage);
+          
+          // Add message to local state
           addMessage({ 
             text: uploadMessage, 
             sender: userType 
@@ -178,6 +183,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
   const showAvatar = lastSpeaker !== null && lastSpeaker !== userType;
   const avatarMessage = showAvatar ? lastReceivedMessage : '';
 
+  // Add a function to handle viewing the 3D model
+  const viewModel = () => {
+    // For patient, redirect to the full-screen viewer page
+    window.location.href = '/view-model';
+  };
+  
+  // Detect if the device is iOS for AR QuickLook support
+  const isIOS = () => {
+    if (typeof window === 'undefined') return false;
+    return /iPhone|iPad|iPod/.test(navigator.userAgent);
+  };
+  
+  // Open model in AR QuickLook on iOS
+  const viewInAR = () => {
+    const url = `/api/get-splat?t=${Date.now()}`;
+    window.location.href = url;
+  };
+
   return (
     <div className="flex flex-col h-full p-4">
       {waitingForOther ? (
@@ -192,10 +215,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
             <h2 className="text-xl font-semibold">
               Chat with {userType === 'doctor' ? 'Patient' : 'Doctor'}
             </h2>
-            <div className="text-sm bg-gray-100 px-3 py-1 rounded-full">
-              {splatStatus === 'unavailable' && 'No 3D model available'}
-              {splatStatus === 'processing' && 'Processing 3D model...'}
-              {splatStatus === 'done' && '3D model ready'}
+            <div className="flex items-center gap-2">
+              <div className="text-sm bg-gray-100 px-3 py-1 rounded-full">
+                {splatStatus === 'unavailable' && 'No 3D model available'}
+                {splatStatus === 'processing' && 'Processing 3D model...'}
+                {splatStatus === 'done' && '3D model ready'}
+              </div>
+              {splatStatus === 'done' && (
+                <>
+                  <button 
+                    onClick={viewModel}
+                    className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full hover:bg-blue-200"
+                  >
+                    View 3D Model
+                  </button>
+                  {isIOS() && (
+                    <button 
+                      onClick={viewInAR}
+                      className="text-sm bg-purple-100 text-purple-800 px-3 py-1 rounded-full hover:bg-purple-200"
+                    >
+                      View in AR
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
           

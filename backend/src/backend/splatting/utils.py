@@ -16,7 +16,9 @@ def construct_splat(images: list[bytes], output_path: str) -> None:
     """
     tmp_dir = os.path.join(os.path.dirname(__file__), "tmp", uuid.uuid4().hex)
     
-    photogrammetry_binary = "/Users/hdeep/Documents/GitHub/HackTech2025/backend/photogrammetry" # TODO: Make this configurable
+    # Get the path to the backend directory
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+    photogrammetry_binary = os.path.join(backend_dir, "photogrammetry") # TODO: Make this configurable
     os.makedirs(tmp_dir, exist_ok=True)
     # save images to tmp_dir
     for i, image in enumerate(images):

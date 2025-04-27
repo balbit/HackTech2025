@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TeleHealth - Telemedicine for Low-Bandwidth Areas",
-  description: "A telemedicine platform with advanced AI features designed for low-bandwidth areas.",
+  title: "TeleHealth",
+  description: "Connect with healthcare professionals remotely",
+  other: {
+    'cross-origin-embedder-policy': 'require-corp',
+    'cross-origin-opener-policy': 'same-origin',
+  },
 };
 
 export default function RootLayout({

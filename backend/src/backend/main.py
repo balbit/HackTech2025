@@ -7,7 +7,7 @@ from src.backend.splatting.utils import construct_splat, base64_to_binary_text
 
 app = FastAPI()
 
-SPLAT_PATH = "/Users/hdeep/Documents/GitHub/HackTech2025/backend/splat.usdz"
+SPLAT_PATH = os.path.join(os.path.dirname(__file__), "splats", "splat.usdz")
 
 @app.get("/health")
 def health_check():
@@ -36,6 +36,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/api/splat")
 async def splat(request: Request, background_tasks: BackgroundTasks):
+    # Delete the old splat file if it exists
+    if os.path.exists(SPLAT_PATH):
+        try:
+            import time
+            timestamp = int(time.time())
+            new_path = f"{SPLAT_PATH}_{timestamp}"
+            os.rename(SPLAT_PATH, new_path)
+            print(f"Renamed existing splat file to {new_path}")
+        except Exception as e:
+            print(f"Error deleting existing splat file: {e}")
+
     data = await request.json()
     images = data.get("images", [])
     if not images:
@@ -46,6 +57,7 @@ async def splat(request: Request, background_tasks: BackgroundTasks):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     background_tasks.add_task(construct_splat, images, SPLAT_PATH)
+
     return {"status": "ok"}
 
 
