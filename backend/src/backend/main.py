@@ -4,10 +4,19 @@ from typing import List
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from src.backend.splatting.utils import construct_splat, base64_to_binary_text
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
 SPLAT_PATH = os.path.join(os.path.dirname(__file__), "splats", "splat.usdz")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 @app.get("/health")
 def health_check():
