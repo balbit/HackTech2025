@@ -9,9 +9,15 @@ import { useChatStore, getSocket, CustomWebSocket } from '@/lib/socket';
 
 interface ChatInterfaceProps {
   userType: 'doctor' | 'patient';
+  onMessageSent?: () => void;
+  onImageUpload?: (sizeInKB: number) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  userType, 
+  onMessageSent,
+  onImageUpload 
+}) => {
   const [message, setMessage] = useState('');
   const [images, setImages] = useState<File[]>([]);
   const [lastReceivedMessage, setLastReceivedMessage] = useState<string>('');
@@ -51,7 +57,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
 
     // Poll for splat status
     const checkSplatInterval = setInterval(() => {
-      fetch('/api/get-splat')
+      // Skip polling if we already have a model loaded
+      if (modelUrl) {
+        return;
+      }
+      
+      fetch('/api/get-splat', {
+        // Add cache control headers to prevent caching responses
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
         .then(async response => {
           // Check the content type to determine if we got the actual file or JSON
           const contentType = response.headers.get('content-type');
@@ -65,7 +82,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
             return null;
           } else if (response.status === 404) {
             // Splat not available
-            setSplatStatus('unavailable');
+            if (splatStatus !== 'unavailable') {
+              setSplatStatus('unavailable');
+            }
             return null;
           } else {
             // It's JSON data with status information
@@ -86,12 +105,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
           }
         })
         .catch(error => console.error('Error checking splat status:', error));
-    }, 2000); // Check every 5 seconds instead of 10 for faster feedback
+    }, 5000); // Check less frequently - every 5 seconds
 
     return () => {
       clearInterval(checkSplatInterval);
     };
-  }, [userType, setUserType, addMessage, setWaitingForOther, setSplatStatus, splatStatus]);
+  }, [userType, setUserType, addMessage, setWaitingForOther, setSplatStatus, splatStatus, modelUrl]);
 
   // Auto-scroll to bottom of chat when new messages arrive
   useEffect(() => {
@@ -99,6 +118,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Set model URL when status becomes 'done'
+  useEffect(() => {
+    if (splatStatus === 'done') {
+      // Generate a unique timestamp to avoid caching issues
+      const timestamp = Date.now();
+      setModelUrl(`/api/get-splat?t=${timestamp}`);
+    } else {
+      setModelUrl(null);
+    }
+  }, [splatStatus]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +144,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
       
       // Set last speaker to self
       setLastSpeaker(userType);
+    }
+
+    if (onMessageSent) {
+      onMessageSent();
     }
   };
 
@@ -131,6 +165,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
       return;
     }
 
+    // Calculate total image size in KB for bandwidth tracking
+    const totalSizeInKB = images.reduce((total, img) => total + Math.round(img.size / 1024), 0);
+
     const formData = new FormData();
     images.forEach(img => formData.append('images', img));
 
@@ -147,6 +184,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
         setImages([]);
         setSplatStatus('processing');
         
+        // Track bandwidth usage if callback provided
+        if (onImageUpload && userType === 'patient') {
+          onImageUpload(totalSizeInKB);
+        }
+        
         // Inform the other user that images have been uploaded
         if (socketRef.current) {
           const uploadMessage = "I've uploaded images for 3D modeling";
@@ -160,6 +202,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
           
           // Set last speaker to self
           setLastSpeaker(userType);
+          
+          // Track message bandwidth if callback provided
+          if (onMessageSent && userType === 'patient') {
+            onMessageSent();
+          }
         }
       } else {
         toast.error('Failed to upload images');
@@ -197,7 +244,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ userType }) => {
   
   // Open model in AR QuickLook on iOS
   const viewInAR = () => {
-    const url = `/api/get-splat?t=${Date.now()}`;
+    const timestamp = Date.now();
+    const url = `/api/get-splat?t=${timestamp}`;
     window.location.href = url;
   };
 

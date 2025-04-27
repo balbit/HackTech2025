@@ -12,7 +12,8 @@ export default function ViewModelPage() {
 
   useEffect(() => {
     // Generate URL with a cache-busting parameter to ensure fresh content
-    const url = `/api/get-splat?t=${Date.now()}`;
+    const timestamp = Date.now();
+    const url = `/api/get-splat?t=${timestamp}`;
     setModelUrl(url);
 
     // Check if the 3D model is available

@@ -1,35 +1,68 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Toaster } from 'react-hot-toast';
 import ChatInterface from '@/components/ChatInterface';
 import ThreeJSViewer from '@/components/ThreeJSViewer';
-import { initializeSocket } from '@/lib/socket';
+import { getSocket } from '@/lib/socket';
 import { useChatStore } from '@/lib/socket';
 
 export default function DoctorPage() {
   const { splatStatus } = useChatStore();
   const [modelUrl, setModelUrl] = useState<string | null>(null);
 
+  // Memoized effect to handle socket connection
   useEffect(() => {
     // Initialize socket connection when component mounts
-    const socket = initializeSocket();
+    const socket = getSocket();
     
+    // Clean up function to disconnect socket
     return () => {
-      // Clean up socket connection when component unmounts
       socket.disconnect();
     };
   }, []);
 
-  // Set model URL when status becomes 'done'
+  // Memoized effect to update model URL
   useEffect(() => {
     if (splatStatus === 'done') {
-      setModelUrl(`/api/get-splat?t=${Date.now()}`);
+      // Generate a unique timestamp to avoid caching issues
+      const timestamp = Date.now();
+      setModelUrl(`/api/get-splat?t=${timestamp}`);
     } else {
       setModelUrl(null);
     }
   }, [splatStatus]);
+  
+  // Memoized model section to prevent re-renders
+  const renderModelSection = useCallback(() => {
+    if (modelUrl) {
+      return (
+        <>
+          <div className="flex-1">
+            <ThreeJSViewer modelUrl={modelUrl} />
+          </div>
+          <div className="p-2 bg-gray-200 text-xs text-gray-600 flex justify-between">
+            <span>Drag to rotate • Scroll to zoom</span>
+            <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Original</a>
+          </div>
+        </>
+      );
+    } else {
+      return (
+        <div className="flex-1 flex items-center justify-center p-6 text-center">
+          <div>
+            <p className="text-gray-500 mb-2">
+              {splatStatus === 'processing' ? 'Processing 3D model...' : 'No 3D model available yet'}
+            </p>
+            {splatStatus === 'processing' && (
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            )}
+          </div>
+        </div>
+      );
+    }
+  }, [modelUrl, splatStatus]);
   
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -55,28 +88,7 @@ export default function DoctorPage() {
           <div className="bg-white rounded-lg shadow-md p-4 flex flex-col">
             <h2 className="text-xl font-semibold mb-4">Patient 3D Model</h2>
             <div className="flex-1 flex flex-col bg-gray-100 rounded-lg overflow-hidden" style={{ minHeight: "350px" }}>
-              {modelUrl ? (
-                <>
-                  <div className="flex-1">
-                    <ThreeJSViewer modelUrl={modelUrl} />
-                  </div>
-                  <div className="p-2 bg-gray-200 text-xs text-gray-600 flex justify-between">
-                    <span>Drag to rotate • Scroll to zoom</span>
-                    <a href={modelUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Original</a>
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center p-6 text-center">
-                  <div>
-                    <p className="text-gray-500 mb-2">
-                      {splatStatus === 'processing' ? 'Processing 3D model...' : 'No 3D model available yet'}
-                    </p>
-                    {splatStatus === 'processing' && (
-                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    )}
-                  </div>
-                </div>
-              )}
+              {renderModelSection()}
             </div>
           </div>
         </div>

@@ -161,9 +161,28 @@ const ThreeJSViewer: React.FC<ThreeJSViewerProps> = ({ modelUrl }) => {
           throw new Error(`Failed to fetch USDZ file: ${response.status}`);
         }
         
+        // Extract filename from the URL or Content-Disposition header
+        let filename = 'model.usdz';
+        const contentDisposition = response.headers.get('Content-Disposition');
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        } else {
+          // Try to extract from URL
+          const urlParts = modelUrl.split('/');
+          const lastPart = urlParts[urlParts.length - 1].split('?')[0];
+          if (lastPart && lastPart.includes('.usdz')) {
+            filename = lastPart;
+          }
+        }
+        
+        console.log("Loading USDZ file with filename:", filename);
+        
         // Convert response to File object for the loader
         const blob = await response.blob();
-        const file = new File([blob], 'model.usdz', { type: 'model/vnd.usdz+zip' });
+        const file = new File([blob], filename, { type: 'model/vnd.usdz+zip' });
         
         // Load the file
         const loadedModel = await loader.loadFile(file, modelGroup);

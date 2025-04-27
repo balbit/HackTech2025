@@ -9,6 +9,9 @@ export async function GET() {
     // First check our local status tracking
     const currentStatus = getSplatStatus();
     
+    // We don't want to short-circuit with JSON response if status is 'done',
+    // because we need to return the actual file
+    
     // Try to fetch the splat file from the backend
     const response = await fetch(`${BACKEND_URL}/api/get-splat`, {
       method: 'GET',
@@ -24,12 +27,16 @@ export async function GET() {
       // Get the file as an arrayBuffer to pass through
       const fileBuffer = await response.arrayBuffer();
       
+      // The filename should be consistent and simple
+      const filename = "splat.usdz";
+      
       // Return the file with the proper content type
       return new NextResponse(fileBuffer, {
         status: 200,
         headers: {
           'Content-Type': 'model/vnd.usdz+zip',
-          'Content-Disposition': 'inline; filename="splat.usdz"'
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-store, must-revalidate'
         }
       });
     } else if (response.status === 404) {
