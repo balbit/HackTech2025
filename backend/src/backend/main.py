@@ -3,7 +3,7 @@ from typing import List
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from src.backend.splatting.utils import construct_splat, base64_to_image
+from src.backend.splatting.utils import construct_splat, base64_to_binary_text
 
 app = FastAPI()
 
@@ -42,7 +42,7 @@ async def splat(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="No images provided")
     
     try:
-        images = [base64_to_image(image) for image in images]
+        images = [base64_to_binary_text(image) for image in images]
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     background_tasks.add_task(construct_splat, images, SPLAT_PATH)

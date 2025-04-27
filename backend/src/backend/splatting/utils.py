@@ -1,19 +1,16 @@
 import base64
-from io import BytesIO
-from PIL import Image
 import uuid
 import os
 
-def base64_to_image(base64_str: str) -> Image:
+def base64_to_binary_text(base64_str: str) -> bytes:
     try:
         image_data = base64.b64decode(base64_str)
-        image = Image.open(BytesIO(image_data))
-        return image
+        return image_data
     except Exception as e:
         raise ValueError("Invalid base64 image") from e
 
 
-def construct_splat(images: list[Image], output_path: str) -> None: 
+def construct_splat(images: list[bytes], output_path: str) -> None: 
     """
     Constructs a splat, saving it to a file.
     """
@@ -23,7 +20,8 @@ def construct_splat(images: list[Image], output_path: str) -> None:
     os.makedirs(tmp_dir, exist_ok=True)
     # save images to tmp_dir
     for i, image in enumerate(images):
-        image.save(os.path.join(tmp_dir, f"image_{i}.png"))
+        with open(os.path.join(tmp_dir, f"image_{i}.heic"), "wb") as f:
+            f.write(image)
     
     # run photogrammetry binary
     try:
