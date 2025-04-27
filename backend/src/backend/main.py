@@ -1,6 +1,7 @@
 import os
+from typing import List
 
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from src.backend.splatting.utils import construct_splat, base64_to_image
 
@@ -11,6 +12,27 @@ SPLAT_PATH = "/Users/hdeep/Documents/GitHub/HackTech2025/backend/splat.usdz"
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+# Store connected WebSocket connections
+connections: List[WebSocket] = []
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    connections.append(websocket)
+    if len(connections) == 2:
+        for i in range(2):
+            await connections[i].send_text("Both connected")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            for connection in connections:
+                if connection != websocket:
+                    await connection.send_text(data)
+    except WebSocketDisconnect:
+        connections.remove(websocket)
+
+
 
 @app.post("/api/splat")
 async def splat(request: Request, background_tasks: BackgroundTasks):
