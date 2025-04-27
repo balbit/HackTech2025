@@ -3,17 +3,53 @@ import { create } from 'zustand';
 
 // Default to localhost during development
 // In production, this would be your backend URL
-const SOCKET_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const SOCKET_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8080';
 
 // Create a singleton socket instance
 let socket: Socket;
 
 export const initializeSocket = (): Socket => {
   if (!socket) {
+    console.log(`Connecting to Socket.IO server at ${SOCKET_URL}`);
+    
     socket = io(SOCKET_URL, {
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,        // Increase reconnection attempts
+      reconnectionDelay: 2000,         // Longer delay between reconnection attempts
+      reconnectionDelayMax: 10000,     // Max delay between reconnection attempts
+      timeout: 20000,                  // Longer connection timeout
       autoConnect: true,
+      transports: ['websocket', 'polling'],  // Try WebSocket first, then polling
+      path: '/ws/socket.io',           // Path to Socket.IO endpoint on server
+      forceNew: true,                  // Force a new connection
+    });
+    
+    // Add event listeners for connection status
+    socket.on('connect', () => {
+      console.log('Socket connected successfully');
+    });
+    
+    socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
+    
+    socket.on('connection_established', (data) => {
+      console.log('Server acknowledged connection:', data);
+    });
+    
+    socket.io.on("error", (error) => {
+      console.error('Socket.IO manager error:', error);
+    });
+    
+    socket.io.on("reconnect_attempt", (attempt) => {
+      console.log(`Socket.IO reconnection attempt ${attempt}`);
+    });
+    
+    socket.io.on("reconnect", (attempt) => {
+      console.log(`Socket.IO reconnected after ${attempt} attempts`);
+    });
+    
+    socket.io.on("reconnect_failed", () => {
+      console.error('Socket.IO reconnection failed after all attempts');
     });
   }
   return socket;
