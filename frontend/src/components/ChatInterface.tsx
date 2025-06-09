@@ -7,6 +7,14 @@ import TalkingAvatar from './TalkingAvatar';
 import ThreeJSViewer from './ThreeJSViewer';
 import { useChatStore, getSocket, CustomWebSocket } from '@/lib/socket';
 
+// Add type declaration for SpeechRecognition
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 interface ChatInterfaceProps {
   userType: 'doctor' | 'patient';
   onMessageSent?: () => void;
@@ -22,6 +30,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [images, setImages] = useState<File[]>([]);
   const [lastReceivedMessage, setLastReceivedMessage] = useState<string>('');
   const [lastSpeaker, setLastSpeaker] = useState<'doctor' | 'patient' | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const recognitionRef = useRef<any>(null);
   const { 
     messages, 
     addMessage, 
@@ -129,6 +140,85 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setModelUrl(null);
     }
   }, [splatStatus]);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        
+        recognition.onstart = () => {
+          setIsListening(true);
+          toast.success('Listening...');
+        };
+        
+        recognition.onresult = (event: any) => {
+          let interimText = '';
+          let finalText = '';
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalText += transcript + ' ';
+            } else {
+              interimText += transcript;
+            }
+          }
+          
+          if (finalText) {
+            setMessage((prev: string) => prev + finalText);
+            setInterimTranscript('');
+          } else {
+            setInterimTranscript(interimText);
+          }
+        };
+        
+        recognition.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+          
+          if (event.error === 'not-allowed') {
+            toast.error('Microphone access denied. Please allow microphone access.');
+          } else {
+            toast.error('Speech recognition error: ' + event.error);
+          }
+        };
+        
+        recognition.onend = () => {
+          setIsListening(false);
+          setInterimTranscript('');
+        };
+        
+        recognitionRef.current = recognition;
+      } else {
+        console.warn('Speech recognition not supported in this browser');
+      }
+    }
+    
+    return () => {
+      if (recognitionRef.current && isListening) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleSpeechRecognition = () => {
+    if (!recognitionRef.current) {
+      toast.error('Speech recognition not supported in this browser');
+      return;
+    }
+    
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      recognitionRef.current.start();
+    }
+  };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -363,22 +453,55 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSendMessage} className="flex gap-2">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={!message.trim()}
-            >
-              Send
-            </button>
-          </form>
+          <div className="space-y-2">
+            {/* Show interim transcript */}
+            {interimTranscript && (
+              <div className="px-4 py-2 bg-gray-100 rounded-lg text-gray-600 text-sm italic">
+                {interimTranscript}
+              </div>
+            )}
+            
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Type your message..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={toggleSpeechRecognition}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  isListening 
+                    ? 'bg-red-500 hover:bg-red-600 text-white mic-recording' 
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                }`}
+                title={isListening ? 'Stop recording' : 'Start recording'}
+              >
+                {/* Microphone icon */}
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-5 w-5" 
+                  viewBox="0 0 20 20" 
+                  fill="currentColor"
+                >
+                  <path 
+                    fillRule="evenodd" 
+                    d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" 
+                    clipRule="evenodd" 
+                  />
+                </svg>
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={!message.trim()}
+              >
+                Send
+              </button>
+            </form>
+          </div>
         </>
       )}
     </div>
